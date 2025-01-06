@@ -1,10 +1,22 @@
-import { Controller, Get, UseGuards } from "@nestjs/common";
-import { CurrentUser } from "src/auth/current-user-decorator";
-import { JwtAuthGuard } from "src/auth/jwt-auth.guard";
-import { UserPayload } from "src/auth/jwt.strategy";
-import { PrismaService } from "src/prisma/prisma.service";
+import { Controller, Get, Query, UseGuards } from "@nestjs/common";
+import { CurrentUser } from "@/auth/current-user-decorator";
+import { JwtAuthGuard } from "@/auth/jwt-auth.guard";
+import { UserPayload } from "@/auth/jwt.strategy";
+import { ZodValidationPipe } from "@/pipes/zod-validation-pipe";
+import { PrismaService } from "@/prisma/prisma.service";
+import { z } from "zod";
 
-@Controller('/questions/recent')
+const pageQueryParamSchema = z
+    .string()
+    .optional()
+    .default('1')
+    .transform(Number)
+    .pipe(z.number().min(1));
+
+const queryValidationPipe = new ZodValidationPipe(pageQueryParamSchema);
+type PageQueryParamSchema = z.infer<typeof pageQueryParamSchema>;
+
+@Controller('/questions')
 @UseGuards(JwtAuthGuard)
 export class FechRecentQuestionsController {
     constructor(
@@ -13,8 +25,11 @@ export class FechRecentQuestionsController {
 
     @Get()
     async fetchRecentQuestions(
+        @Query('page', queryValidationPipe) page: PageQueryParamSchema,
         @CurrentUser() user: UserPayload
     ) {
+        const perPage = 1;
+
         return this.prisma.question.findMany({
             where: {
                 authorId: user.sub,
@@ -22,7 +37,8 @@ export class FechRecentQuestionsController {
             orderBy: {
                 createdAt: 'desc',
             },
-            take: 10,
+            take: perPage,
+            skip: (page - 1) * perPage,
         });
     }
 }
