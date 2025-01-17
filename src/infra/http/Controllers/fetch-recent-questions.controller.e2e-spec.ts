@@ -1,19 +1,19 @@
-import { AppModule } from '@/app.module';
-import { PrismaService } from '@/prisma/prisma.service';
+import { AppModule } from '@/infra/app.module';
+import { PrismaService } from '@/infra/prisma/prisma.service';
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { hash } from 'bcryptjs';
 import request from 'supertest';
 
-describe('Create question (E2E)', () => {
+describe('Create fetch recent question (E2E)', () => {
     let app: INestApplication;
     let prisma: PrismaService;
     let jwt: JwtService;
 
     beforeAll(async () => {
         const moduleRef = await Test.createTestingModule({
-            imports:[AppModule],
+            imports: [AppModule],
         }).compile();
 
         app = moduleRef.createNestApplication();
@@ -24,7 +24,7 @@ describe('Create question (E2E)', () => {
         await app.init();
     });
 
-    test('[POST] /questions', async () => {
+    test('[GET] /questions', async () => {
         const user = await prisma.user.create({
             data: {
                 name: 'John Doe',
@@ -32,29 +32,28 @@ describe('Create question (E2E)', () => {
                 password: await hash('123456', 8),
             }
         });
-
+        
         const accessToken = jwt.sign({ sub: user.id });
 
         let title = 'Queimadas amazonia';
+        await request(app.getHttpServer())
+            .post('/questions')
+            .set('Authorization', `Bearer ${accessToken}`)
+            .send({
+                title: title,
+                content: 'Como proteger a floresta amazonica das queimadas?',
+            })
+
         const response = await request(app.getHttpServer())
-        .post('/questions')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({
+            .get('/questions')
+            .set('Authorization', `Bearer ${accessToken}`);
+
+
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveLength(1);
+        expect(response.body[0]).toEqual(expect.objectContaining({
+            id: expect.any(String),
             title: title,
-            content: 'Como proteger a floresta amazonica das queimadas?',
-        })
-        
-        expect(response.status).toBe(201);
-        expect(response.body).toEqual(expect.objectContaining({
-            id: expect.any(String)
         }));
-
-        const userDatabase = await prisma.question.findUnique({
-            where: {
-                slug: title.toLowerCase().replace(/ /g, '-'),
-            }
-        });
-
-        expect(userDatabase).toBeTruthy();
     });
 });
