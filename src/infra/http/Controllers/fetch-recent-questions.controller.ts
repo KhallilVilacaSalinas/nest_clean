@@ -5,6 +5,8 @@ import { UserPayload } from "@/infra/auth/jwt.strategy";
 import { ZodValidationPipe } from "@/infra/http/pipes/zod-validation-pipe";
 import { PrismaService } from "@/infra/database/prisma/prisma.service";
 import { z } from "zod";
+import { FetchRecentQuestionsUseCase } from "@/domain/forum/application/use-cases/fetch-recent-questions";
+import { QuestionPresenter } from "../presenters/question-presenter";
 
 const pageQueryParamSchema = z
     .string()
@@ -20,7 +22,7 @@ type PageQueryParamSchema = z.infer<typeof pageQueryParamSchema>;
 @UseGuards(JwtAuthGuard)
 export class FechRecentQuestionsController {
     constructor(
-        private readonly prisma: PrismaService
+        private readonly fetchRecentQuestionsUseCase: FetchRecentQuestionsUseCase
     ) {}
 
     @Get()
@@ -28,17 +30,16 @@ export class FechRecentQuestionsController {
         @Query('page', queryValidationPipe) page: PageQueryParamSchema,
         @CurrentUser() user: UserPayload
     ) {
-        const perPage = 1;
-
-        return this.prisma.question.findMany({
-            where: {
-                authorId: user.sub,
-            },
-            orderBy: {
-                createdAt: 'desc',
-            },
-            take: perPage,
-            skip: (page - 1) * perPage,
+        const result = await this.fetchRecentQuestionsUseCase.execute({
+            page
         });
+
+        if (result.isLeft()) {
+            throw new Error('Failed to fetch recent questions');
+        }
+
+        const questions = result.value.questions;
+
+        return { questions: questions.map(QuestionPresenter.toHTTTP) };
     }
 }
