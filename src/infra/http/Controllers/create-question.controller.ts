@@ -5,6 +5,7 @@ import { UserPayload } from "@/infra/auth/jwt.strategy";
 import { ZodValidationPipe } from "@/infra/http/pipes/zod-validation-pipe";
 import { PrismaService } from "@/infra/database/prisma/prisma.service";
 import { z } from "zod";
+import { CreateQuestionUseCase } from "@/domain/forum/application/use-cases/create-question";
 
 const createQuestionSchema = z.object({
     title: z.string(),
@@ -18,7 +19,7 @@ type CreateQuestionSchema = z.infer<typeof createQuestionSchema>;
 @UseGuards(JwtAuthGuard)
 export class CreateQuestionController {
     constructor(
-        private readonly prisma: PrismaService,
+        private readonly createQuestion: CreateQuestionUseCase,
     ) {}
 
     @Post()
@@ -27,25 +28,12 @@ export class CreateQuestionController {
         @CurrentUser() user: UserPayload
     ) {
         const { title, content } = createQuestionSchema.parse(body);
-        const slug = title.toLowerCase().replace(/ /g, '-');
 
-        const question = await this.prisma.question.findUnique({
-            where: {
-                slug: slug,
-            },
-        });
-
-        if (question) {
-            throw new ConflictException('Question already exists');
-        }
-
-        return this.prisma.question.create({
-            data: {
-                title: title,
-                slug: slug,
-                content: content,
-                authorId: user.sub,
-            },
+        await this.createQuestion.execute({
+            title,
+            content,
+            authorId: user.sub,
+            attachmentsIds: []
         });
     }
 }
